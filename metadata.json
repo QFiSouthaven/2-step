@@ -1,0 +1,5 @@
+{
+  "name": "CodeContext.ai",
+  "description": "Convert entire project folders into a single LLM-readable text file for context windows. Includes AI-powered codebase analysis using Gemini 2.5 Flash.",
+  "requestFramePermissions": []
+}
