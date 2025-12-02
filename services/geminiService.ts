@@ -1,5 +1,6 @@
+
 import { GoogleGenAI } from "@google/genai";
-import { SummaryFocus, AgentTask, AgentRole } from "../types";
+import { SummaryFocus, AgentTask, AgentRole, SimulationResult, ProjectAnalysis, RefactoringPlan, ModularizationStrategyType } from "../types";
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -242,5 +243,151 @@ export const executeAgentTask = async (agentRole: AgentRole, task: AgentTask, co
     } catch (e) {
         console.error(`Agent Execution Failed (${agentRole})`, e);
         throw e;
+    }
+};
+
+// --- Runtime Simulation Service ---
+
+export const simulateRuntime = async (context: string, command: string, platform: string): Promise<SimulationResult | null> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const prompt = `
+    ACT AS A VIRTUAL RUNTIME ENVIRONMENT.
+    Context: A software project codebase.
+    Platform: ${platform}
+    Command Executed: "${command}"
+
+    Your Goal: Simulate the execution of this project startup sequence.
+    1. Analyze the 'package.json', 'requirements.txt', 'Dockerfile', or entry points in the code.
+    2. SIMULATE the console output logs that would appear in a terminal.
+    3. If there are likely errors (missing dependencies, syntax errors in key files, missing env vars), SHOW THEM IN THE LOGS.
+    4. If it would likely start successfully, show the startup logs (e.g. "Server listening on port 3000").
+    
+    Also, generate a structured Health Report JSON object.
+
+    OUTPUT FORMAT:
+    Return a JSON object with this EXACT structure:
+    {
+      "logs": "string containing the multi-line terminal output",
+      "health": {
+         "status": "healthy" | "warning" | "critical",
+         "issues": [ { "severity": "critical"|"warning", "message": "string", "recommendation": "string" } ],
+         "metrics": {
+            "startupTime": "string (e.g. 2.4s)",
+            "memoryEstimate": "string (e.g. 45MB)",
+            "compatibilityScore": number (0-100)
+         }
+      }
+    }
+    `;
+
+    try {
+        const result = await callWithRetry(async () => {
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: `Codebase Context:\n${context.substring(0, 60000)}\n\n${prompt}`,
+                config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.2, // Low temp for realistic simulation
+                    thinkingConfig: { thinkingBudget: 4096 } // Give it thought to trace dependencies
+                }
+            });
+            return response.text;
+        });
+        
+        if (!result) return null;
+        return JSON.parse(result);
+    } catch (e) {
+        console.error("Simulation Failed", e);
+        return null;
+    }
+};
+
+// --- Compose to Modular Services ---
+
+export const analyzeProjectStructure = async (context: string): Promise<ProjectAnalysis | null> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const prompt = `
+    ACT AS A SENIOR SYSTEM ARCHITECT.
+    Goal: Analyze this monolithic codebase to prepare it for refactoring into a modular architecture.
+    
+    Tasks:
+    1. Calculate metrics (LOC, file count, estimated complexity 1-10, maintainability score A-F).
+    2. Detect logical "Seams" where the code can be split. Look for Functional boundaries, Data flow, and Namespace clustering.
+    3. Identify suggested Modules based on these seams.
+
+    Return JSON with this structure:
+    {
+      "metrics": { "loc": number, "fileCount": number, "complexity": number, "maintainability": "string" },
+      "seams": [ { "id": "string", "name": "string", "type": "functional"|"dependency", "confidence": number, "rationale": "string", "files": ["string"] } ],
+      "detectedModules": [ { "name": "string", "description": "string", "files": ["string"], "dependencies": ["string"] } ]
+    }
+    `;
+
+    try {
+        const result = await callWithRetry(async () => {
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: `Codebase Context:\n${context.substring(0, 60000)}\n\n${prompt}`,
+                config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.3,
+                    thinkingConfig: { thinkingBudget: 4096 }
+                }
+            });
+            return response.text;
+        });
+        
+        if (!result) return null;
+        return JSON.parse(result);
+    } catch (e) {
+        console.error("Project Analysis Failed", e);
+        return null;
+    }
+};
+
+export const generateModularArchitecture = async (context: string, analysis: ProjectAnalysis, strategy: ModularizationStrategyType): Promise<RefactoringPlan | null> => {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    
+    const prompt = `
+    ACT AS A CODE REFACTORING EXPERT.
+    Strategy: ${strategy.toUpperCase()}
+    
+    Goal: Generate a concrete plan to restructure this project into modules.
+    
+    Strategies Guide:
+    - CONSERVATIVE: Minimize changes, only split clear boundaries.
+    - BALANCED: Create logical modules, add basic documentation.
+    - AGGRESSIVE: Full re-architecture, Domain Driven Design, separate folders for everything.
+
+    Return JSON:
+    {
+      "strategy": "${strategy}",
+      "modules": [ { "name": "string", "description": "string", "files": ["string"], "dependencies": ["string"] } ],
+      "newStructure": [ { "path": "string", "type": "file"|"dir" } ],
+      "docs": "Markdown explanation of the changes and migration guide."
+    }
+    `;
+
+    try {
+         const result = await callWithRetry(async () => {
+            const response = await ai.models.generateContent({
+                model: 'gemini-3-pro-preview',
+                contents: `Codebase Context:\n${context.substring(0, 60000)}\n\nAnalysis Data:\n${JSON.stringify(analysis)}\n\n${prompt}`,
+                config: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.4,
+                    thinkingConfig: { thinkingBudget: 4096 }
+                }
+            });
+            return response.text;
+        });
+        
+        if (!result) return null;
+        return JSON.parse(result);
+    } catch (e) {
+        console.error("Modular Generation Failed", e);
+        return null;
     }
 };

@@ -8,6 +8,7 @@ export interface ProcessedFile {
   selected: boolean;
   isBinary?: boolean;
   summary?: string;
+  isNew?: boolean; // For newly generated files
 }
 
 export interface ProcessingStats {
@@ -22,6 +23,7 @@ export type FileNode = {
   isFile: boolean;
   children?: FileNode[];
   checked?: boolean;
+  isNew?: boolean;
 };
 
 export type SummaryFocus = 'general' | 'security' | 'performance' | 'core';
@@ -76,8 +78,14 @@ export interface Agent {
   message?: string; // Current thought/status message
 }
 
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
+export type TaskStatus = 'pending' | 'queued' | 'in_progress' | 'validating' | 'completed' | 'failed' | 'blocked';
 export type TaskPriority = 'critical' | 'high' | 'medium' | 'low';
+
+export interface TaskDependency {
+    source: string; // Task ID that MUST complete
+    target: string; // Task ID that is blocked
+    type: 'hard' | 'soft';
+}
 
 export interface AgentTask {
   id: string;
@@ -87,8 +95,13 @@ export interface AgentTask {
   status: TaskStatus;
   priority: TaskPriority;
   assignedAgentId?: string;
-  dependencies: string[]; // IDs of other tasks
+  dependencies: string[]; // IDs of other tasks that block this one
   result?: string; // The output of the task
+  validationResult?: 'approved' | 'rejected' | 'pending';
+  createdAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  retryCount: number;
 }
 
 export interface ColosseumEvent {
@@ -97,4 +110,71 @@ export interface ColosseumEvent {
   source: string; // Agent Name
   type: 'info' | 'success' | 'warning' | 'error';
   message: string;
+}
+
+// --- Runtime Simulation Types ---
+
+export interface RuntimeHealth {
+    status: 'healthy' | 'warning' | 'critical' | 'unknown';
+    issues: {
+        severity: 'critical' | 'warning' | 'info';
+        message: string;
+        recommendation: string;
+    }[];
+    metrics: {
+        startupTime: string;
+        memoryEstimate: string;
+        compatibilityScore: number;
+    };
+}
+
+export interface SimulationResult {
+    logs: string;
+    health: RuntimeHealth;
+}
+
+// --- Compose to Modular Types ---
+
+export interface Seam {
+    id: string;
+    name: string;
+    type: 'functional' | 'class' | 'namespace' | 'dependency';
+    confidence: number; // 0-1
+    rationale: string;
+    files: string[]; // List of file paths involved
+}
+
+export interface ModuleDefinition {
+    name: string;
+    description: string;
+    files: string[];
+    dependencies: string[]; // Names of other modules
+}
+
+export interface ProjectAnalysis {
+    metrics: {
+        loc: number;
+        fileCount: number;
+        complexity: number; // 1-10
+        maintainability: 'A' | 'B' | 'C' | 'D' | 'F';
+    };
+    seams: Seam[];
+    detectedModules: ModuleDefinition[];
+}
+
+export type ModularizationStrategyType = 'conservative' | 'balanced' | 'aggressive';
+
+export interface ModularizationStrategy {
+    type: ModularizationStrategyType;
+    preserveStructure: boolean;
+    separateFolders: boolean;
+    generateDocs: boolean;
+    addTypeHints: boolean;
+}
+
+export interface RefactoringPlan {
+    strategy: ModularizationStrategyType;
+    modules: ModuleDefinition[];
+    newStructure: { path: string; type: 'file' | 'dir' }[];
+    docs: string; // Markdown documentation of the plan
 }

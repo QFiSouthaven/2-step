@@ -10,7 +10,7 @@ interface ColosseumContextType {
     isSwarmActive: boolean;
     startSwarm: (context: string) => Promise<void>;
     stopSwarm: () => void;
-    addTask: (task: Omit<AgentTask, 'id' | 'status' | 'dependencies'>) => void;
+    addTask: (task: Omit<AgentTask, 'id' | 'status' | 'dependencies' | 'createdAt' | 'retryCount'>) => void;
     projectContext: string | null;
 }
 
@@ -58,12 +58,14 @@ export const ColosseumProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setEvents(prev => [newEvent, ...prev].slice(0, 100));
     };
 
-    const addTask = (task: Omit<AgentTask, 'id' | 'status' | 'dependencies'>) => {
+    const addTask = (task: Omit<AgentTask, 'id' | 'status' | 'dependencies' | 'createdAt' | 'retryCount'>) => {
         const newTask: AgentTask = {
             ...task,
             id: Math.random().toString(36).substr(2, 9),
             status: 'pending',
-            dependencies: []
+            dependencies: [],
+            createdAt: Date.now(),
+            retryCount: 0
         };
         setTasks(prev => [...prev, newTask]);
         addEvent('System', 'info', `Task added: ${newTask.title}`);
@@ -90,7 +92,9 @@ export const ColosseumProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 type: t.type || 'feature',
                 status: 'pending',
                 priority: (t.priority as any) || 'medium',
-                dependencies: []
+                dependencies: [],
+                createdAt: Date.now(),
+                retryCount: 0
             }));
 
             setTasks(prev => [...prev, ...newTasks]);
